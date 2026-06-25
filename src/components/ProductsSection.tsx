@@ -5,6 +5,7 @@ import {
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { useGSAP } from '@gsap/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import './ProductsSection.css';
 
 // Register ScrollTrigger plugin
@@ -166,6 +167,19 @@ export default function ProductsSection() {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const containerRef = useRef<HTMLDivElement>(null);
   const snapPointsRef = useRef<number[]>([]);
+  const [isMobile, setIsMobile] = useState<boolean>(false);
+  const [activeCategoryIndex, setActiveCategoryIndex] = useState<number>(0);
+  const sliderRef = useRef<HTMLDivElement>(null);
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const categories: Category[] = [
     {
@@ -263,10 +277,29 @@ export default function ProductsSection() {
     }
   ];
 
+  useEffect(() => {
+    if (isMobile && sliderRef.current) {
+      sliderRef.current.scrollLeft = 0;
+    }
+  }, [activeCategoryIndex, isMobile]);
+
+  const handleTabClick = (idx: number) => {
+    setActiveCategoryIndex(idx);
+    const tabEl = tabRefs.current[idx];
+    if (tabEl) {
+      tabEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }
+  };
+
+  const handleNextCategory = () => {
+    const nextIdx = (activeCategoryIndex + 1) % categories.length;
+    handleTabClick(nextIdx);
+  };
+
   // Master timeline for layered categories and horizontal scrolling
   useGSAP(() => {
-    // Return early if searching is active (since elements are hidden/different layout)
-    if (searchQuery) return;
+    // Return early if searching is active or on mobile (since elements are hidden/different layout)
+    if (searchQuery || isMobile) return;
 
     const container = containerRef.current;
     if (!container) return;
@@ -401,7 +434,7 @@ export default function ProductsSection() {
         });
       }
     });
-  }, { scope: containerRef, dependencies: [searchQuery] });
+  }, { scope: containerRef, dependencies: [searchQuery, isMobile] });
 
   useEffect(() => {
     // Force recalculating ScrollTrigger measurements once everything (including lazy images) is ready
@@ -440,7 +473,7 @@ export default function ProductsSection() {
         </div>
       </div>
 
-      {/* If user is searching, show grid inside layout wrapper. Otherwise, show pinned vertical/horizontal scroll panels directly under section */}
+      {/* If user is searching, show grid inside layout wrapper. Otherwise, show mobile view or pinned vertical/horizontal scroll panels */}
       {searchQuery ? (
         <div className="products-layout-wrapper">
           <div className="search-results-panel">
@@ -481,6 +514,105 @@ export default function ProductsSection() {
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      ) : isMobile ? (
+        <div className={`mobile-categories-wrapper ${activeCategoryIndex % 2 === 0 ? 'theme-light' : 'theme-dark'}`}>
+          <div className="mobile-category-tabs-container">
+            <div className="mobile-category-tabs">
+              {categories.map((cat, idx) => (
+                <button
+                  key={cat.id}
+                  ref={(el) => { tabRefs.current[idx] = el; }}
+                  className={`mobile-category-tab ${activeCategoryIndex === idx ? 'active' : ''}`}
+                  onClick={() => handleTabClick(idx)}
+                >
+                  <span className="tab-icon">{cat.icon}</span>
+                  <span className="tab-name">{cat.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="mobile-category-viewport">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeCategoryIndex}
+                initial={{ opacity: 0, x: 30 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -30 }}
+                transition={{ duration: 0.25, ease: 'easeOut' }}
+                className="mobile-category-slider"
+                ref={sliderRef}
+              >
+                {/* Category Intro Card */}
+                <div className="product-item-card category-intro-card mobile-intro-card">
+                  <div className="category-card-count">
+                    <span className="current-num">{(activeCategoryIndex + 1).toString().padStart(2, '0')}</span>
+                    <span className="slash">/</span>
+                    <span className="total-num">{categories.length.toString().padStart(2, '0')}</span>
+                  </div>
+                  <div className="category-icon-indicator">{categories[activeCategoryIndex].icon}</div>
+                  <h3 className="category-name-heading">{categories[activeCategoryIndex].name}</h3>
+                  <p className="category-description-text">{categories[activeCategoryIndex].description}</p>
+                  <div className="scroll-indicator-wrap">
+                    <span className="indicator-text">Swipe Left to Explore Products</span>
+                    <span className="indicator-arrow">→</span>
+                  </div>
+                </div>
+
+                {/* Product Cards */}
+                {categories[activeCategoryIndex].subcategories.map((sub, idx) => {
+                  const imageUrl = subcategoryImages[sub] || categories[activeCategoryIndex].image;
+                  return (
+                    <div key={idx} className="product-item-card mobile-product-card">
+                      <div className="product-image-container">
+                        <img src={imageUrl} alt={sub} className="product-img-element" loading="lazy" />
+                        <div className="product-overlay-gradient"></div>
+                      </div>
+                      <div className="product-content-overlay">
+                        <span className="product-item-number">{(idx + 1).toString().padStart(2, '0')}</span>
+                        <h4 className="product-item-title">{sub}</h4>
+                        <p className="product-item-desc">Premium quality, fully customizable designs & upholstery.</p>
+                        <a href="#contact" className="product-item-cta">
+                          <span>INQUIRE NOW</span>
+                          <ArrowRight size={14} className="cta-arrow-icon" />
+                        </a>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Next Category Card */}
+                <div className="product-item-card coming-soon-card mobile-next-card" onClick={handleNextCategory}>
+                  <div className="coming-soon-card-content">
+                    <div className="coming-soon-badge">✨ EXPLORE NEXT</div>
+                    <h4 className="coming-soon-title">
+                      {categories[(activeCategoryIndex + 1) % categories.length].name}
+                    </h4>
+                    <p className="coming-soon-desc">
+                      Ready to check out the next segment? Tap below or swipe tabs at the top.
+                    </p>
+                    <div className="coming-soon-separator"></div>
+                    <div className="coming-soon-cta">
+                      <span>VIEW COLLECTION</span>
+                      <ArrowRight size={14} className="coming-soon-arrow-icon" />
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            </AnimatePresence>
+          </div>
+
+          <div className="mobile-dots-indicator">
+            {categories.map((_, idx) => (
+              <button
+                key={idx}
+                className={`mobile-dot ${activeCategoryIndex === idx ? 'active' : ''}`}
+                onClick={() => handleTabClick(idx)}
+                aria-label={`Go to category ${idx + 1}`}
+              />
+            ))}
           </div>
         </div>
       ) : (
